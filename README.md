@@ -1,4 +1,4 @@
-# README: Multi-Asset Option Pricing with Monte Carlo Simulation
+# Multi-Asset Option Pricing with Monte Carlo Simulation
 
 ## Table of Contents
 
