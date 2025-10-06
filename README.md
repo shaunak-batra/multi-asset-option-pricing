@@ -1,47 +1,5 @@
 # Multi-Asset Option Pricing with Monte Carlo Simulation
 
-## Table of Contents
-
-1. [Overview](#overview)
-2. [Mathematical Foundation](#mathematical-foundation)
-   - [Options and Multi-Asset Options](#options-and-multi-asset-options)
-   - [Geometric Brownian Motion](#geometric-brownian-motion)
-   - [Monte Carlo Simulation](#monte-carlo-simulation)
-   - [Correlation and Cholesky Decomposition](#correlation-and-cholesky-decomposition)
-3. [Option Pricing Models](#option-pricing-models)
-   - [Basket Option](#basket-option)
-   - [Rainbow Option](#rainbow-option)
-   - [Exchange Option](#exchange-option)
-   - [Spread Option](#spread-option)
-4. [Code Architecture](#code-architecture)
-   - [Class Hierarchy](#class-hierarchy)
-   - [Key Components](#key-components)
-5. [Implementation Details](#implementation-details)
-   - [TwoFactorModel](#twofactormodel)
-   - [MonteCarloMultiAssetPricer](#montecarlomultiassetpricer)
-   - [GreeksCalculator](#greekscalculator)
-   - [Input Validation](#input-validation)
-   - [Interactive Pricing](#interactive-pricing)
-6. [Optimization Techniques](#optimization-techniques)
-   - [Efficient Random Number Generation](#efficient-random-number-generation)
-   - [Simplified Cholesky Decomposition](#simplified-cholesky-decomposition)
-   - [Monte Carlo Efficiency](#monte-carlo-efficiency)
-7. [Usage Examples](#usage-examples)
-   - [Pricing a Basket Option](#pricing-a-basket-option)
-   - [Correlation Sensitivity Analysis](#correlation-sensitivity-analysis)
-8. [Limitations and Assumptions](#limitations-and-assumptions)
-   - [Model Assumptions](#model-assumptions)
-   - [Implementation Limitations](#implementation-limitations)
-9. [Compilation and Execution](#compilation-and-execution)
-   - [Dependencies](#dependencies)
-   - [How to Compile](#how-to-compile)
-   - [Running the Program](#running-the-program)
-10. [Testing and Validation](#testing-and-validation)
-    - [Unit Testing](#unit-testing)
-    - [Monte Carlo Convergence](#monte-carlo-convergence)
-
----
-
 ## Overview
 
 This C++ program is designed to price **multi-asset options**, which are financial instruments whose value depends on the performance of multiple underlying assets (like stocks, commodities, or indices). Unlike single-asset options (e.g., a stock option), multi-asset options are more complex because their payoff depends on the combined behavior of several assets, which may move together or independently.
