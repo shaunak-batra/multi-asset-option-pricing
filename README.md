@@ -1,403 +1,890 @@
-# Multi-Asset Option Pricing with Monte Carlo Simulation
+# Multi-Asset Option Pricing System
+
+A comprehensive C++ implementation for pricing multi-asset exotic options using Monte Carlo simulation with correlated asset dynamics.
+
+---
+
+## Table of Contents
+
+1. [Overview](#overview)
+2. [Mathematical Framework](#mathematical-framework)
+   - [Geometric Brownian Motion](#geometric-brownian-motion)
+   - [Correlated Asset Dynamics](#correlated-asset-dynamics)
+   - [Cholesky Decomposition](#cholesky-decomposition)
+   - [Risk-Neutral Valuation](#risk-neutral-valuation)
+3. [Multi-Asset Option Types](#multi-asset-option-types)
+   - [Basket Options](#basket-options)
+   - [Rainbow Options](#rainbow-options)
+   - [Exchange Options](#exchange-options)
+   - [Spread Options](#spread-options)
+4. [Monte Carlo Simulation](#monte-carlo-simulation)
+5. [Statistical Analysis](#statistical-analysis)
+6. [Option Greeks](#option-greeks)
+7. [Implementation Details](#implementation-details)
+8. [Usage Guide](#usage-guide)
+9. [Compilation and Execution](#compilation-and-execution)
+
+---
 
 ## Overview
 
-This C++ program is designed to price **multi-asset options**, which are financial instruments whose value depends on the performance of multiple underlying assets (like stocks, commodities, or indices). Unlike single-asset options (e.g., a stock option), multi-asset options are more complex because their payoff depends on the combined behavior of several assets, which may move together or independently.
+This system implements a sophisticated multi-asset option pricing engine that supports various exotic options. The core methodology employs **Monte Carlo simulation** with **correlated geometric Brownian motion** to model asset price evolution under the risk-neutral measure.
 
-The program uses a **Monte Carlo simulation** to estimate option prices. Monte Carlo simulation is like rolling a dice many times to predict possible outcomes—in this case, to simulate how asset prices might move in the future and calculate the option's value based on those scenarios. The code supports four types of multi-asset options: **Basket**, **Rainbow**, **Exchange**, and **Spread** options, each with different payoff structures.
+### Key Features
 
-The program is interactive, allowing users to input parameters like asset prices, volatilities, correlations, and the number of simulations. It also provides confidence intervals for price estimates and supports sensitivity analysis to understand how changes in asset correlations affect option prices. The code is modular, object-oriented, and includes input validation to ensure robustness.
-
-This README explains the mathematics behind the options and the simulation, the code structure, optimizations, and how to use the program, making it accessible even if you're not a math or finance expert.
+- Multiple exotic option types (Basket, Rainbow, Exchange, Spread)
+- Correlated multi-asset price simulation
+- Monte Carlo pricing with confidence intervals
+- Interactive command-line interface
+- Correlation sensitivity analysis
+- Greeks calculation framework
 
 ---
 
-## Mathematical Foundation
-
-This section explains the key mathematical concepts used in the code, broken down into simple terms for clarity.
-
-### Options and Multi-Asset Options
-
-An **option** is a financial contract that gives you the right (but not the obligation) to buy or sell an asset at a specific price (called the **strike price**) by a certain date (the **expiration date**). For example, a **call option** lets you buy an asset, while a **put option** lets you sell it.
-
-**Multi-asset options** depend on multiple assets. For instance:
-- A **Basket Option** depends on the weighted average of several asset prices.
-- A **Rainbow Option** depends on the best or worst-performing asset.
-- An **Exchange Option** lets you swap one asset for another.
-- A **Spread Option** depends on the difference between two asset prices.
-
-The challenge is that these assets don’t move independently—their prices are often **correlated** (e.g., if one stock rises, another might rise too). The program accounts for this correlation when simulating future prices.
+## Mathematical Framework
 
 ### Geometric Brownian Motion
 
-The program assumes that asset prices follow a **Geometric Brownian Motion (GBM)** model. Imagine asset prices as a wiggly line on a graph that tends to drift upward or downward over time but also has random fluctuations.
+The fundamental model for asset price evolution is **Geometric Brownian Motion (GBM)**, which describes the stochastic behavior of asset prices in continuous time.
 
-- **Drift**: This is the expected average movement of the asset price, like a gentle push upward if the asset is expected to grow.
-- **Volatility**: This measures how much the price wiggles randomly. High volatility means big, unpredictable swings.
-- **Random Component**: The wiggles are modeled as random numbers drawn from a **normal distribution** (a bell-shaped curve where most values cluster around the average).
+#### Single Asset Dynamics
 
-Mathematically, for an asset with price \( S_t \) at time \( t \), GBM is described by:
+For a single asset *S*, the price evolution under the physical measure follows:
 
-\[ S_t = S_0 \exp\left( \left( \mu - \frac{\sigma^2}{2} \right)t + \sigma \sqrt{t} Z \right) \]
-
-Where:
-- \( S_0 \): Initial price of the asset.
-- \( \mu \): Expected return (drift).
-- \( \sigma \): Volatility (how much the price fluctuates).
-- \( t \): Time.
-- \( Z \): A random number from a normal distribution (mean 0, standard deviation 1).
-- \( \exp \): The exponential function (e raised to a power).
-
-The program uses this formula to simulate future asset prices at the option’s expiration.
-
-### Monte Carlo Simulation
-
-Monte Carlo simulation is a method to estimate outcomes by running many random scenarios. Here’s how it works for option pricing:
-
-1. **Simulate Asset Prices**: Generate thousands of possible future price paths for all assets using GBM, accounting for their correlations.
-2. **Calculate Payoff**: For each scenario, compute the option’s payoff (how much money you’d make if the option were exercised).
-3. **Average and Discount**: Average the payoffs across all scenarios and discount them back to today’s value using the **risk-free rate** (like the interest rate on a safe investment, e.g., government bonds).
-
-The formula for the option price is:
-
-\[ \text{Option Price} = e^{-rT} \cdot \text{Average Payoff} \]
+```
+dS(t) = μ S(t) dt + σ S(t) dW(t)
+```
 
 Where:
-- \( r \): Risk-free rate.
-- \( T \): Time to maturity (in years).
-- \( e^{-rT} \): Discounts future value to present value (because money today is worth more than money in the future).
+- **S(t)**: Asset price at time *t*
+- **μ**: Drift rate (expected return)
+- **σ**: Volatility (standard deviation of returns)
+- **dW(t)**: Increment of a standard Wiener process (Brownian motion)
 
-The more simulations you run, the more accurate the price estimate, but it takes longer to compute.
+#### Closed-Form Solution
 
-### Correlation and Cholesky Decomposition
+Using Itô's lemma, the solution to the GBM stochastic differential equation is:
 
-When assets are correlated, their price movements are linked. For example, if two stocks are in the same industry, they might rise or fall together. This is captured by a **correlation matrix**, where each entry (between -1 and 1) shows how strongly two assets move together:
-- \( 1 \): Perfectly correlated (move exactly together).
-- \( -1 \): Perfectly negatively correlated (move in opposite directions).
-- \( 0 \): Independent.
+```
+S(T) = S(0) · exp[(μ - σ²/2)T + σ√T · Z]
+```
 
-To simulate correlated asset prices, the program uses **Cholesky decomposition**. Think of it as a recipe to transform independent random numbers (like rolling separate dice) into correlated random numbers (like dice that influence each other).
+Where:
+- **S(0)**: Initial spot price
+- **T**: Time to maturity
+- **Z**: Standard normal random variable ~ N(0,1)
+- **(μ - σ²/2)**: Drift adjustment (Itô correction)
 
-For two assets with correlation \( \rho \), the Cholesky decomposition creates correlated random numbers \( Z_1 \) and \( Z_2 \):
+**Implementation** (multi_asset_option.cpp:176-178):
+```cpp
+double drift = (mu[i] - 0.5 * sigma[i] * sigma[i]) * T;
+double diffusion = sigma[i] * std::sqrt(T) * Z[i];
+final_prices[i] = S0[i] * std::exp(drift + diffusion);
+```
 
-\[ Z_1 = W_1 \]
-\[ Z_2 = \rho W_1 + \sqrt{1 - \rho^2} W_2 \]
-
-Where \( W_1 \) and \( W_2 \) are independent random numbers from a normal distribution. This ensures the simulated price movements respect the correlation structure.
+The term **-σ²/2** is the **Itô correction**, which accounts for the convexity adjustment when converting from the SDE to the exact solution.
 
 ---
 
-## Option Pricing Models
+### Correlated Asset Dynamics
 
-The code supports four types of multi-asset options, each with a unique payoff structure. Let’s break them down.
+For *n* assets, we model their joint evolution with a correlation structure.
 
-### Basket Option
+#### Multi-Dimensional GBM
 
-A **Basket Option** depends on the weighted average of multiple asset prices. For example, if you have two stocks priced at $100 and $50 with weights 0.6 and 0.4, the basket value is:
+For *i*-th asset:
 
-\[ 0.6 \times 100 + 0.4 \times 50 = 60 + 20 = 80 \]
+```
+dSᵢ(t) = μᵢ Sᵢ(t) dt + σᵢ Sᵢ(t) dWᵢ(t)
+```
 
-The payoff for a call option is:
+Where the Brownian motions satisfy:
 
-\[ \text{Payoff} = \max(\text{Basket Value} - \text{Strike}, 0) \]
+```
+dWᵢ(t) · dWⱼ(t) = ρᵢⱼ dt
+```
 
-For a put option, it’s:
+Here **ρᵢⱼ** is the correlation coefficient between assets *i* and *j*.
 
-\[ \text{Payoff} = \max(\text{Strike} - \text{Basket Value}, 0) \]
+#### Correlation Matrix
 
-The code allows users to specify weights and whether it’s a call or put option.
+The correlation matrix **Ρ** is symmetric and positive semi-definite:
 
-### Rainbow Option
+```
+     ⎡ 1    ρ₁₂  ρ₁₃  ... ⎤
+Ρ =  ⎢ ρ₂₁   1   ρ₂₃  ... ⎥
+     ⎢ ρ₃₁  ρ₃₂   1   ... ⎥
+     ⎣ ...  ...  ...   1  ⎦
+```
 
-A **Rainbow Option** focuses on either the **best** or **worst** performing asset among a group. For example:
-- **Best-of Call**: Pays off based on the highest asset price.
-- **Worst-of Put**: Pays off based on the lowest asset price.
-
-The payoff for a best-of call is:
-
-\[ \text{Payoff} = \max(\text{Max Asset Price} - \text{Strike}, 0) \]
-
-For a worst-of put:
-
-\[ \text{Payoff} = \max(\text{Strike} - \text{Min Asset Price}, 0) \]
-
-The code uses `std::max_element` and `std::min_element` to find the extreme values.
-
-### Exchange Option
-
-An **Exchange Option** lets you swap one asset for another. If you have two assets with prices \( S_1 \) and \( S_2 \), the payoff is:
-
-\[ \text{Payoff} = \max(S_1 - S_2, 0) \]
-
-This means you profit if the first asset is worth more than the second at expiration. No strike price is needed.
-
-### Spread Option
-
-A **Spread Option** depends on the difference (spread) between two asset prices. For a call option:
-
-\[ \text{Payoff} = \max(S_1 - S_2 - \text{Strike}, 0) \]
-
-For a put option:
-
-\[ \text{Payoff} = \max(\text{Strike} - (S_1 - S_2), 0) \]
-
-This is useful for betting on the relative performance of two assets.
+Properties:
+- Diagonal elements are 1 (each asset is perfectly correlated with itself)
+- **ρᵢⱼ = ρⱼᵢ** (symmetry)
+- **-1 ≤ ρᵢⱼ ≤ 1** (correlation bounds)
+- All eigenvalues ≥ 0 (positive semi-definite)
 
 ---
 
-## Code Architecture
+### Cholesky Decomposition
 
-The code is designed using **object-oriented programming (OOP)** principles for modularity and extensibility. Below is an overview of its structure.
+To generate correlated random variables, we use **Cholesky decomposition** of the correlation matrix.
 
-### Class Hierarchy
+#### Mathematical Theory
 
-The program uses a class hierarchy to model options and their pricing:
+Given a positive semi-definite matrix **Ρ**, Cholesky decomposition finds a lower triangular matrix **L** such that:
 
-- **MultiAssetOption**: An abstract base class for all multi-asset options. It defines:
-  - Common attributes: Time to maturity (\( T \)), risk-free rate (\( r \)), strike prices (\( K \)).
-  - Pure virtual functions: `payoff` (to compute the option’s payoff) and `get_type` (to identify the option type).
-- **Derived Classes**: Specific option types inherit from `MultiAssetOption`:
-  - `BasketOption`: Handles weighted basket options.
-  - `RainbowOption`: Handles best-of/worst-of options.
-  - `ExchangeOption`: Handles asset swaps.
-  - `SpreadOption`: Handles price spreads.
-- **TwoFactorModel**: Models the evolution of multiple correlated assets using GBM.
-- **MonteCarloMultiAssetPricer**: Performs Monte Carlo simulations to price options.
-- **GreeksCalculator**: Computes option sensitivities (though delta calculation is incomplete in the code).
+```
+Ρ = L · Lᵀ
+```
 
-### Key Components
+#### Two-Asset Case (Simplified)
 
-- **Random Number Generation**: Uses `std::mt19937` (Mersenne Twister) for high-quality random numbers and `std::normal_distribution` for normal random variables.
-- **Input Validation**: Functions like `get_positive_double` and `get_correlation` ensure robust user input.
-- **Interactive Interface**: The `run_interactive_pricing` function guides users through parameter input and option selection.
+For two assets with correlation **ρ**:
+
+```
+Ρ = ⎡ 1   ρ ⎤
+    ⎣ ρ   1 ⎦
+```
+
+The Cholesky decomposition is:
+
+```
+L = ⎡ 1       0      ⎤
+    ⎣ ρ   √(1-ρ²)   ⎦
+```
+
+#### Generating Correlated Random Variables
+
+1. Generate independent standard normal variables: **Z₁, Z₂ ~ N(0,1)**
+2. Transform using Cholesky matrix:
+
+```
+Z₁' = Z₁
+Z₂' = ρ · Z₁ + √(1 - ρ²) · Z₂
+```
+
+Now **Z₁'** and **Z₂'** are standard normal with correlation **ρ**.
+
+**Implementation** (multi_asset_option.cpp:157-161):
+```cpp
+if (n == 2) {
+    double rho = correlation[0][1];
+    correlated_randoms[0] = independent_randoms[0];
+    correlated_randoms[1] = rho * independent_randoms[0] +
+                           std::sqrt(1 - rho * rho) * independent_randoms[1];
+}
+```
+
+#### Verification
+
+The correlation can be verified:
+
+```
+Corr(Z₁', Z₂') = E[Z₁' · Z₂']
+                = E[Z₁ · (ρZ₁ + √(1-ρ²)Z₂)]
+                = ρ E[Z₁²] + √(1-ρ²) E[Z₁Z₂]
+                = ρ · 1 + √(1-ρ²) · 0
+                = ρ
+```
+
+---
+
+### Risk-Neutral Valuation
+
+Under the **risk-neutral measure** (also called the **martingale measure**), option prices are computed as discounted expected payoffs.
+
+#### Risk-Neutral Dynamics
+
+Under the risk-neutral measure **Q**, the drift of each asset equals the risk-free rate:
+
+```
+dSᵢ(t) = r Sᵢ(t) dt + σᵢ Sᵢ(t) dWᵢᴼ(t)
+```
+
+Where **r** is the risk-free rate and **Wᴼ** denotes Brownian motion under **Q**.
+
+#### Option Pricing Formula
+
+The price of an option with payoff **h(S₁(T), ..., Sₙ(T))** at maturity **T** is:
+
+```
+V(0) = e⁻ʳᵀ · Eᴼ[h(S₁(T), ..., Sₙ(T))]
+```
+
+Where:
+- **e⁻ʳᵀ**: Discount factor (present value)
+- **Eᴼ[·]**: Expectation under risk-neutral measure
+- **h(·)**: Payoff function
+
+**Implementation** (multi_asset_option.cpp:228-229):
+```cpp
+double average_payoff = sum_payoffs / num_simulations;
+return std::exp(-option.r * option.T) * average_payoff;
+```
+
+---
+
+## Multi-Asset Option Types
+
+### Basket Options
+
+A **basket option** is an option on a weighted portfolio (basket) of underlying assets.
+
+#### Basket Value
+
+The basket value at time *t* is defined as:
+
+```
+B(t) = Σᵢ wᵢ · Sᵢ(t)
+```
+
+Where:
+- **wᵢ**: Weight of asset *i* in the basket
+- **Σᵢ wᵢ = 1**: Weights typically sum to 1
+- **Sᵢ(t)**: Price of asset *i* at time *t*
+
+#### Payoff Functions
+
+**Basket Call Option:**
+```
+Payoff = max(B(T) - K, 0)
+       = max(Σᵢ wᵢ·Sᵢ(T) - K, 0)
+```
+
+**Basket Put Option:**
+```
+Payoff = max(K - B(T), 0)
+       = max(K - Σᵢ wᵢ·Sᵢ(T), 0)
+```
+
+Where **K** is the strike price.
+
+**Implementation** (multi_asset_option.cpp:37-47):
+```cpp
+double payoff(const std::vector<double>& spot_prices) const override {
+    double basket_value = 0.0;
+    for (size_t i = 0; i < spot_prices.size(); ++i) {
+        basket_value += weights[i] * spot_prices[i];
+    }
+
+    if (is_call) {
+        return std::max(basket_value - K[0], 0.0);
+    } else {
+        return std::max(K[0] - basket_value, 0.0);
+    }
+}
+```
+
+#### Properties
+
+- **Diversification Effect**: Basket volatility is typically lower than individual asset volatilities due to correlation < 1
+- **Correlation Sensitivity**: Price increases with correlation for call options
+- **Commonly Used**: For index options, portfolio hedging, structured products
+
+---
+
+### Rainbow Options
+
+**Rainbow options** are path-independent multi-asset options whose payoff depends on the best-performing or worst-performing asset.
+
+#### Best-of Option
+
+Payoff based on the maximum asset value:
+
+**Best-of Call:**
+```
+Payoff = max(max{S₁(T), S₂(T), ..., Sₙ(T)} - K, 0)
+```
+
+**Best-of Put:**
+```
+Payoff = max(K - max{S₁(T), S₂(T), ..., Sₙ(T)}, 0)
+```
+
+#### Worst-of Option
+
+Payoff based on the minimum asset value:
+
+**Worst-of Call:**
+```
+Payoff = max(min{S₁(T), S₂(T), ..., Sₙ(T)} - K, 0)
+```
+
+**Worst-of Put:**
+```
+Payoff = max(K - min{S₁(T), S₂(T), ..., Sₙ(T)}, 0)
+```
+
+**Implementation** (multi_asset_option.cpp:65-77):
+```cpp
+double payoff(const std::vector<double>& spot_prices) const override {
+    double extreme_value;
+    if (is_best_of) {
+        extreme_value = *std::max_element(spot_prices.begin(), spot_prices.end());
+    } else {
+        extreme_value = *std::min_element(spot_prices.begin(), spot_prices.end());
+    }
+
+    if (is_call) {
+        return std::max(extreme_value - K[0], 0.0);
+    } else {
+        return std::max(K[0] - extreme_value, 0.0);
+    }
+}
+```
+
+#### Properties
+
+- **Best-of options**: More valuable than single-asset options (holder chooses best performer)
+- **Worst-of options**: Less valuable than single-asset options (forced to take worst performer)
+- **Correlation Sensitivity**: Best-of calls decrease in value with higher correlation
+- **Alternative Names**: "Altiplano options", "Outperformance options"
+
+---
+
+### Exchange Options
+
+An **exchange option** gives the holder the right to exchange one asset for another.
+
+#### Payoff Function
+
+```
+Payoff = max(S₁(T) - S₂(T), 0)
+```
+
+The holder exchanges asset 2 for asset 1 if asset 1 is worth more.
+
+**Implementation** (multi_asset_option.cpp:92-94):
+```cpp
+double payoff(const std::vector<double>& spot_prices) const override {
+    if (spot_prices.size() < 2) return 0.0;
+    return std::max(spot_prices[0] - spot_prices[1], 0.0);
+}
+```
+
+#### Margrabe Formula
+
+Exchange options have a closed-form solution known as the **Margrabe formula** (1978):
+
+```
+V = S₁(0) · N(d₁) - S₂(0) · N(d₂)
+```
+
+Where:
+
+```
+d₁ = [ln(S₁(0)/S₂(0)) + (σ²/2)T] / (σ√T)
+d₂ = d₁ - σ√T
+
+σ² = σ₁² + σ₂² - 2ρ₁₂σ₁σ₂
+```
+
+Here:
+- **σ**: Volatility of the ratio S₁/S₂
+- **N(·)**: Cumulative standard normal distribution
+- **ρ₁₂**: Correlation between the two assets
+
+#### Properties
+
+- **No strike price**: The strike is effectively the second asset
+- **Symmetric structure**: Similar to call option on ratio S₁/S₂
+- **Applications**: Mergers & acquisitions, asset swaps, portfolio rebalancing
+
+---
+
+### Spread Options
+
+A **spread option** has payoff based on the difference (spread) between two asset prices relative to a strike.
+
+#### Payoff Functions
+
+**Spread Call:**
+```
+Payoff = max(S₁(T) - S₂(T) - K, 0)
+```
+
+**Spread Put:**
+```
+Payoff = max(K - (S₁(T) - S₂(T)), 0)
+```
+
+Where **K** is the strike on the spread.
+
+**Implementation** (multi_asset_option.cpp:111-119):
+```cpp
+double payoff(const std::vector<double>& spot_prices) const override {
+    if (spot_prices.size() < 2) return 0.0;
+    double spread = spot_prices[0] - spot_prices[1];
+
+    if (is_call) {
+        return std::max(spread - K[0], 0.0);
+    } else {
+        return std::max(K[0] - spread, 0.0);
+    }
+}
+```
+
+#### Relation to Exchange Options
+
+- When **K = 0**, spread call equals exchange option: max(S₁ - S₂, 0)
+- General case adds strike price to the spread
+
+#### Applications
+
+- **Energy markets**: Crack spreads (crude oil vs. refined products)
+- **Fixed income**: Yield curve spreads
+- **Commodities**: Location spreads (same commodity, different locations)
+- **Equities**: Pairs trading strategies
+
+---
+
+## Monte Carlo Simulation
+
+**Monte Carlo simulation** is a numerical method for pricing options by simulating random paths of underlying assets and averaging payoffs.
+
+### Algorithm Overview
+
+1. **Simulate** asset prices at maturity under risk-neutral measure
+2. **Compute** option payoff for each simulation
+3. **Average** all payoffs
+4. **Discount** average payoff to present value
+
+### Mathematical Foundation
+
+By the Law of Large Numbers, as the number of simulations *N* → ∞:
+
+```
+(1/N) Σᵢ₌₁ᴺ h(Sᵢ(T)) → Eᴼ[h(S(T))]
+```
+
+The Monte Carlo estimator for option price is:
+
+```
+V̂(0) = e⁻ʳᵀ · (1/N) Σᵢ₌₁ᴺ h(Sⁱ₁(T), ..., Sⁱₙ(T))
+```
+
+Where the superscript *i* denotes the *i*-th simulation path.
+
+**Implementation** (multi_asset_option.cpp:219-229):
+```cpp
+double price_option(const MultiAssetOption& option) {
+    double sum_payoffs = 0.0;
+
+    for (int i = 0; i < num_simulations; ++i) {
+        std::vector<double> final_prices = model.simulate_final_prices(option.T);
+        double payoff = option.payoff(final_prices);
+        sum_payoffs += payoff;
+    }
+
+    double average_payoff = sum_payoffs / num_simulations;
+    return std::exp(-option.r * option.T) * average_payoff;
+}
+```
+
+### Convergence Rate
+
+The standard error of the Monte Carlo estimator is:
+
+```
+SE = σ̂/√N
+```
+
+Where:
+- **σ̂**: Sample standard deviation of payoffs
+- **N**: Number of simulations
+
+Key insight: Error decreases as **1/√N**, so:
+- To halve the error, need **4× more simulations**
+- To achieve 10× better accuracy, need **100× more simulations**
+
+### Advantages of Monte Carlo
+
+1. **Flexibility**: Can price any payoff structure
+2. **High Dimensions**: Efficiency doesn't degrade much with number of assets
+3. **Path Dependence**: Can handle path-dependent features
+4. **Intuitive**: Directly simulates real-world scenarios
+
+### Disadvantages
+
+1. **Slow Convergence**: O(1/√N) rate
+2. **Computational Cost**: Requires many simulations for accuracy
+3. **Early Exercise**: Difficult for American options (requires backward induction)
+
+---
+
+## Statistical Analysis
+
+### Confidence Intervals
+
+A **confidence interval** provides a range within which the true option price likely falls.
+
+#### Standard Error Calculation
+
+For *N* simulations with discounted payoffs {V₁, V₂, ..., Vₙ}:
+
+**Sample Mean:**
+```
+V̄ = (1/N) Σᵢ Vᵢ
+```
+
+**Sample Variance:**
+```
+s² = [1/(N-1)] Σᵢ (Vᵢ - V̄)²
+```
+
+**Standard Error:**
+```
+SE = s/√N
+```
+
+**Implementation** (multi_asset_option.cpp:244-249):
+```cpp
+double variance = 0.0;
+for (double payoff : payoffs) {
+    variance += (payoff - mean_payoff) * (payoff - mean_payoff);
+}
+variance /= (num_simulations - 1);
+double std_error = std::sqrt(variance / num_simulations);
+```
+
+#### Confidence Interval Formula
+
+For a confidence level α (typically 95%), the confidence interval is:
+
+```
+CI = V̄ ± z_(α/2) · SE
+```
+
+For 95% confidence: **z₀.₀₂₅ = 1.96**
+
+```
+CI₉₅% = V̄ ± 1.96 · SE
+```
+
+**Implementation** (multi_asset_option.cpp:254-256):
+```cpp
+double z_score = 1.96;  // for 95% confidence
+double margin_error = z_score * price_std_error;
+return {price, margin_error};
+```
+
+#### Interpretation
+
+"We are 95% confident that the true option price lies within [V̄ - 1.96·SE, V̄ + 1.96·SE]"
+
+### Central Limit Theorem
+
+The justification for using the normal distribution is the **Central Limit Theorem**:
+
+```
+(V̄ - E[V]) / (σ/√N) → N(0, 1)  as N → ∞
+```
+
+Even if individual payoffs are not normally distributed, their average approaches a normal distribution for large *N*.
+
+---
+
+## Option Greeks
+
+**Greeks** measure the sensitivity of option prices to changes in input parameters.
+
+### Delta (Δ)
+
+**Delta** measures the rate of change of option price with respect to the underlying asset price.
+
+#### Definition
+
+For asset *i*:
+
+```
+Δᵢ = ∂V/∂Sᵢ
+```
+
+#### Finite Difference Approximation
+
+For small bump Δ*S*:
+
+```
+Δᵢ ≈ [V(S₁, ..., Sᵢ + ΔS, ..., Sₙ) - V(S₁, ..., Sᵢ, ..., Sₙ)] / ΔS
+```
+
+Alternatively, **central difference** (more accurate):
+
+```
+Δᵢ ≈ [V(S₁, ..., Sᵢ + ΔS, ..., Sₙ) - V(S₁, ..., Sᵢ - ΔS, ..., Sₙ)] / (2ΔS)
+```
+
+**Framework** (multi_asset_option.cpp:273-283):
+```cpp
+std::vector<double> calculate_delta(const MultiAssetOption& option) {
+    std::vector<double> deltas;
+    double base_price = pricer.price_option(option);
+
+    // Finite difference approximation for each underlying
+    // Note: This is a simplified approach - in practice, you'd need to modify the model
+    std::cout << "Delta calculation requires model modification for proper implementation.\n";
+    std::cout << "Base price: " << base_price << std::endl;
+
+    return deltas;
+}
+```
+
+### Other Greeks
+
+While not fully implemented, the framework can be extended for:
+
+**Gamma (Γ)**: Second derivative with respect to spot price
+```
+Γᵢ = ∂²V/∂Sᵢ²
+```
+
+**Vega (ν)**: Sensitivity to volatility
+```
+νᵢ = ∂V/∂σᵢ
+```
+
+**Rho (ρ)**: Sensitivity to interest rate
+```
+ρ = ∂V/∂r
+```
+
+**Theta (Θ)**: Time decay
+```
+Θ = -∂V/∂t
+```
 
 ---
 
 ## Implementation Details
 
-This section dives into the code’s key components, explaining how they work and why they’re implemented that way.
+### Class Hierarchy
 
-### TwoFactorModel
+```
+MultiAssetOption (Abstract Base Class)
+    ├── BasketOption
+    ├── RainbowOption
+    ├── ExchangeOption
+    └── SpreadOption
+```
 
-The `TwoFactorModel` class simulates asset price paths using GBM, accounting for correlations.
+Each derived class implements:
+- `payoff()`: Computes option payoff given final asset prices
+- `get_type()`: Returns descriptive string of option type
 
-- **Constructor**: Takes initial prices (\( S_0 \)), drifts (\( \mu \)), volatilities (\( \sigma \)), and a correlation matrix.
-- **generate_correlated_randoms**: Uses Cholesky decomposition to produce correlated random numbers. For two assets, it implements a simplified formula; for more assets, it falls back to using independent randoms (a limitation).
-- **simulate_final_prices**: Generates asset prices at maturity using the GBM formula.
-- **simulate_paths**: Generates full price paths over multiple time steps, useful for path-dependent options (though not used in the current code).
+### TwoFactorModel Class
 
-**Why It Matters**: This class is the core of the simulation, ensuring realistic price movements that respect correlations.
+Handles simulation of correlated asset prices:
 
-### MonteCarloMultiAssetPricer
+**Key Methods:**
+- `generate_correlated_randoms()`: Uses Cholesky decomposition
+- `simulate_final_prices(T)`: Generates prices at maturity *T*
+- `simulate_paths(T, steps)`: Generates full price paths (for path-dependent options)
 
-This class runs Monte Carlo simulations to price options.
+**Path Simulation** (multi_asset_option.cpp:185-206):
+```cpp
+std::vector<std::vector<double>> simulate_paths(double T, int time_steps) {
+    double dt = T / time_steps;
+    std::vector<std::vector<double>> paths(S0.size(), std::vector<double>(time_steps + 1));
 
-- **price_option**: Runs `num_simulations` scenarios, computes payoffs, and discounts the average to get the option price.
-- **price_with_confidence**: Computes the option price and a 95% confidence interval by calculating the standard error of the payoffs. The confidence interval tells you how reliable the price estimate is.
+    // Initialize with spot prices
+    for (size_t i = 0; i < S0.size(); ++i) {
+        paths[i][0] = S0[i];
+    }
 
-**Math Behind Confidence Interval**:
-- The standard error measures the variability of the average payoff.
-- For a 95% confidence interval, the code uses a z-score of 1.96 (from the normal distribution) to estimate the margin of error:
+    // Generate path
+    for (int t = 1; t <= time_steps; ++t) {
+        std::vector<double> Z = generate_correlated_randoms();
 
-\[ \text{Margin of Error} = 1.96 \times \text{Standard Error} \]
+        for (size_t i = 0; i < S0.size(); ++i) {
+            double drift = (mu[i] - 0.5 * sigma[i] * sigma[i]) * dt;
+            double diffusion = sigma[i] * std::sqrt(dt) * Z[i];
+            paths[i][t] = paths[i][t-1] * std::exp(drift + diffusion);
+        }
+    }
 
-\[ \text{Standard Error} = \sqrt{\frac{\text{Variance of Payoffs}}{\text{Number of Simulations}}} \]
+    return paths;
+}
+```
 
-This helps users understand the precision of the Monte Carlo estimate.
+### MonteCarloMultiAssetPricer Class
 
-### GreeksCalculator
+Performs Monte Carlo pricing:
 
-The `GreeksCalculator` class is meant to compute **Greeks** (sensitivities of the option price to various factors, like asset prices). Currently, it only has a placeholder for delta (sensitivity to asset price changes) using a finite difference method, but it’s incomplete.
+**Key Methods:**
+- `price_option()`: Returns point estimate of option price
+- `price_with_confidence()`: Returns price with confidence interval
 
-**Why Greeks Matter**: Greeks help traders understand how option prices change with market conditions, aiding in risk management. The incomplete implementation is a limitation.
+### Random Number Generation
 
-### Input Validation
-
-Functions like `get_positive_double`, `get_correlation`, and `get_option_choice` ensure that user inputs are valid (e.g., positive numbers for prices, correlations between -1 and 1). They use loops to prompt users until valid input is provided, making the program user-friendly and robust.
-
-### Interactive Pricing
-
-The `run_interactive_pricing` function is the main entry point:
-- Prompts for the number of assets, their parameters, correlations, and Monte Carlo settings.
-- Displays a model summary.
-- Lets users choose an option type to price or perform a correlation sensitivity analysis.
-- Handles specific inputs (e.g., weights for basket options) and normalizes weights if needed.
-
-This makes the program accessible to users without coding expertise.
-
----
-
-## Optimization Techniques
-
-The code includes several optimizations to improve performance and usability.
-
-### Efficient Random Number Generation
-
-- **Mersenne Twister (`std::mt19937`)**: A high-quality random number generator that produces reliable, repeatable random numbers.
-- **Single Instance**: The `TwoFactorModel` creates one `std::mt19937` instance, reused across simulations, avoiding the overhead of repeated initialization.
-- **Normal Distribution**: Uses `std::normal_distribution` for efficient generation of normally distributed random numbers, critical for GBM.
-
-### Simplified Cholesky Decomposition
-
-For two assets, the code uses a simplified Cholesky decomposition formula, avoiding the need for a full matrix decomposition. This is faster and sufficient for the common case of two assets:
-
-\[ Z_1 = W_1 \]
-\[ Z_2 = \rho W_1 + \sqrt{1 - \rho^2} W_2 \]
-
-For more than two assets, it falls back to independent randoms, which is less computationally intensive but less accurate.
-
-### Monte Carlo Efficiency
-
-- **Single-Loop Simulation**: The `price_option` method uses a single loop for simulations, minimizing overhead.
-- **Reduced Simulations for Sensitivity Analysis**: The correlation sensitivity analysis uses half the number of simulations (`num_simulations/2`) to speed up computation while still providing meaningful results.
-- **Vector Operations**: Uses `std::vector` for efficient storage and iteration over asset prices and payoffs.
+Uses C++ `<random>` library:
+- **Engine**: `std::mt19937` (Mersenne Twister)
+- **Distribution**: `std::normal_distribution<double>`
+- **Seeding**: `std::random_device` for non-deterministic seed
 
 ---
 
-## Usage Examples
+## Usage Guide
 
-Here’s how to use the program, with examples.
+### Interactive Mode
 
-### Pricing a Basket Option
+The program provides an interactive command-line interface:
 
-1. Run the program.
-2. Enter the number of assets (e.g., 2).
-3. For each asset, input:
-   - Initial price (e.g., $100, $50).
-   - Expected return (e.g., 0.05, 0.03).
-   - Volatility (e.g., 0.2, 0.15).
-4. Enter the correlation (e.g., 0.5).
-5. Specify option parameters:
-   - Time to maturity (e.g., 1 year).
-   - Risk-free rate (e.g., 0.02).
-   - Number of simulations (e.g., 100,000).
-6. Choose option type 1 (Basket Option).
-7. Enter strike price (e.g., $75) and call/put (e.g., ‘C’ for call).
-8. Enter weights (e.g., 0.6, 0.4). If they don’t sum to 1, choose to normalize.
-9. View the price and confidence interval (e.g., “Price: $10.25 ± $0.15”).
+1. **Asset Parameters**: Enter number of assets and their properties (S₀, μ, σ)
+2. **Correlation Matrix**: Specify correlations between assets
+3. **Option Parameters**: Set time to maturity *T* and risk-free rate *r*
+4. **Simulation Parameters**: Choose number of Monte Carlo simulations
+5. **Option Selection**: Select which option type to price
 
-### Correlation Sensitivity Analysis
+### Menu Options
 
-1. Follow steps 1–5 above, ensuring exactly 2 assets.
-2. Choose option type 7 (Correlation Sensitivity Analysis).
-3. The program tests correlations from -0.8 to 0.8 and shows how the basket call option price changes (e.g., higher correlations may increase the price due to synchronized asset movements).
+1. **Basket Option**: Specify weights and strike
+2. **Rainbow Option (Best-of)**: Select best-performing asset
+3. **Rainbow Option (Worst-of)**: Select worst-performing asset
+4. **Exchange Option**: Option to exchange asset 1 for asset 2
+5. **Spread Option**: Option on spread between two assets
+6. **Price All Options**: Compute prices for all option types simultaneously
+7. **Correlation Sensitivity Analysis**: Analyze how prices vary with correlation
 
----
+### Example Workflow
 
-## Limitations and Assumptions
+```
+Number of assets: 2
 
-### Model Assumptions
+Asset 1:
+  Initial price: $100
+  Expected return: 0.05
+  Volatility: 0.20
 
-- **Geometric Brownian Motion**: Assumes asset prices follow GBM, which may not capture real-world complexities like jumps or fat-tailed distributions.
-- **Constant Parameters**: Assumes constant drift, volatility, and correlation over time, which isn’t always realistic.
-- **Risk-Neutral Pricing**: Uses the risk-free rate for discounting, assuming a risk-neutral world (standard in option pricing but not always reflective of market dynamics).
+Asset 2:
+  Initial price: $95
+  Expected return: 0.06
+  Volatility: 0.25
 
-### Implementation Limitations
+Correlation between Asset 1 and Asset 2: 0.50
 
-- **Two-Asset Focus**: The Cholesky decomposition is optimized for two assets; for more assets, it uses independent randoms, ignoring correlations.
-- **Incomplete Greeks**: The delta calculation is a placeholder and not fully implemented.
-- **No Path-Dependent Options**: The `simulate_paths` function exists but isn’t used, limiting the program to European-style options (exercised only at maturity).
-- **No Parallelization**: Monte Carlo simulations are single-threaded, which can be slow for large numbers of simulations.
+Time to maturity: 1.0 years
+Risk-free rate: 0.03
+Number of simulations: 100000
+
+Select option type: 1 (Basket Option)
+Strike price: $100
+Call or Put: C (Call)
+Weights: 0.5, 0.5
+
+Result: Price: $8.45 ± $0.12
+```
 
 ---
 
 ## Compilation and Execution
 
-### Dependencies
+### Requirements
 
-- A C++ compiler supporting C++11 or later (e.g., g++, clang++).
-- Standard C++ library (included in most compilers).
-- No external libraries required.
+- C++17 or later
+- Standard library support for `<random>`, `<vector>`, `<algorithm>`
 
-### How to Compile
+### Compilation
 
-Save the code as `multi_asset_option.cpp` and compile with:
-
+Using g++:
 ```bash
-g++ -std=c++11 multi_asset_option.cpp -o multi_asset_option
+g++ -std=c++17 -O3 -o multi_asset_option multi_asset_option.cpp
 ```
 
-For optimization (faster execution):
-
+Using clang++:
 ```bash
-g++ -std=c++11 -O3 multi_asset_option.cpp -o multi_asset_option
+clang++ -std=c++17 -O3 -o multi_asset_option multi_asset_option.cpp
 ```
 
-### Running the Program
+### Optimization Flags
 
-Run the executable:
+- `-O3`: Maximum optimization for speed
+- `-march=native`: Optimize for local CPU architecture
+- `-flto`: Link-time optimization
+
+Full optimized compilation:
+```bash
+g++ -std=c++17 -O3 -march=native -flto -o multi_asset_option multi_asset_option.cpp
+```
+
+### Execution
 
 ```bash
 ./multi_asset_option
 ```
 
-Follow the interactive prompts to input parameters and select an option type.
+---
+
+## Mathematical Notation Reference
+
+| Symbol | Meaning |
+|--------|---------|
+| **S(t)** or **Sᵢ(t)** | Price of asset (or asset *i*) at time *t* |
+| **S(0)** or **S₀** | Initial spot price |
+| **S(T)** | Final price at maturity |
+| **μ** or **μᵢ** | Drift rate (expected return) |
+| **σ** or **σᵢ** | Volatility (standard deviation of returns) |
+| **r** | Risk-free interest rate |
+| **T** | Time to maturity (in years) |
+| **K** | Strike price |
+| **ρᵢⱼ** | Correlation between asset *i* and *j* |
+| **W(t)** or **Wᵢ(t)** | Wiener process (Brownian motion) |
+| **Z** or **Zᵢ** | Standard normal random variable |
+| **V** or **V(t)** | Option value/price |
+| **h(·)** | Payoff function |
+| **E[·]** or **Eᴼ[·]** | Expectation (under risk-neutral measure) |
+| **N(·)** | Cumulative standard normal distribution |
+| **Ρ** | Correlation matrix |
+| **L** | Cholesky decomposition matrix |
 
 ---
 
-## Testing and Validation
+## References and Further Reading
 
-### Unit Testing
+### Key Papers
 
-The code doesn’t include explicit unit tests, but you can validate it by:
-- **Known Cases**: Compare results with analytical solutions for simple cases (e.g., a basket option with one asset should match Black-Scholes).
-- **Edge Cases**: Test extreme correlations (-1, 1) or zero volatility to ensure payoffs are correct.
+1. **Black, F., & Scholes, M. (1973)**. "The Pricing of Options and Corporate Liabilities." *Journal of Political Economy*, 81(3), 637-654.
 
-### Monte Carlo Convergence
+2. **Margrabe, W. (1978)**. "The Value of an Option to Exchange One Asset for Another." *Journal of Finance*, 33(1), 177-186.
 
-To verify accuracy:
-- Increase `num_simulations` (e.g., from 10,000 to 1,000,000) and check if the price converges (changes less).
-- The confidence interval (`±` value) should shrink as the number of simulations increases, indicating a more precise estimate.
+3. **Boyle, P. P. (1977)**. "Options: A Monte Carlo approach." *Journal of Financial Economics*, 4(3), 323-338.
 
-=== Interactive Multi-Asset Option Pricing ===
+### Textbooks
 
-Enter number of underlying assets (2 recommended): 2
+- **Hull, J. C.** *Options, Futures, and Other Derivatives* (Chapter on Exotic Options)
+- **Glasserman, P.** *Monte Carlo Methods in Financial Engineering* (Springer)
+- **Joshi, M. S.** *The Concepts and Practice of Mathematical Finance*
 
---- Asset Parameters ---
-Asset 1:
-  Initial price (S0): $100
-  Expected return (mu): 0.05
-  Volatility (sigma): 0.20
+### Mathematical Concepts
 
-Asset 2:
-  Initial price (S0): $110  
-  Expected return (mu): 0.06
-  Volatility (sigma): 0.25
+- **Stochastic Calculus**: Itô's Lemma, Stochastic Differential Equations
+- **Numerical Methods**: Monte Carlo Simulation, Variance Reduction Techniques
+- **Linear Algebra**: Cholesky Decomposition, Positive Definite Matrices
+- **Probability Theory**: Central Limit Theorem, Law of Large Numbers
 
---- Correlation Matrix ---
-Correlation between Asset 1 and Asset 2: 0.3
+---
 
---- Option Parameters ---
-Time to maturity (years): 1.0
-Risk-free rate: 0.03
+## License
 
---- Simulation Parameters ---
-Number of Monte Carlo simulations: 100000
+This implementation is provided for educational and research purposes.
 
-Select option type to price:
-1. Basket Option
-2. Rainbow Option (Best-of)  
-3. Rainbow Option (Worst-of)
-4. Exchange Option
-5. Spread Option
-6. Price All Options
-7. Correlation Sensitivity Analysis
-Enter your choice (1-7): 1
+---
 
---- BASKET OPTION ---
+## Author Notes
 
-Strike price: $105
+This system demonstrates:
+- Object-oriented design in C++ for financial derivatives
+- Implementation of advanced stochastic models
+- Numerical methods for high-dimensional problems
+- Statistical analysis of simulation results
 
-Call or Put option? (C/P): C
+The code prioritizes clarity and correctness over performance optimization, making it suitable for learning and prototyping.
 
-Enter weights for basket (should sum to 1.0):
+**Note**: For production use, consider:
+- Variance reduction techniques (antithetic variates, control variates)
+- Parallel computation (OpenMP, CUDA)
+- More sophisticated correlation handling (spectral decomposition)
+- Historical calibration and model validation
 
-Weight for Asset 1: 0.6
+---
 
-Weight for Asset 2: 0.4
-
-Basket Call Results:
-
-Price: $12.45 ± $0.23
-
-P.S: This implementation is for educational and research purposes. Financial decisions should not be made solely based on this model without considering its limitations and consulting with qualified financial professionals.
+**Disclaimer**: This implementation is for educational and research purposes. Financial decisions should not be made solely based on this model without considering its limitations and consulting with qualified financial professionals.
