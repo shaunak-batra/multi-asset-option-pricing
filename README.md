@@ -869,7 +869,7 @@ This implementation is provided for educational and research purposes.
 
 ---
 
-## Author Notes
+## Notes
 
 This system demonstrates:
 - Object-oriented design in C++ for financial derivatives
